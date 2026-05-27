@@ -1,0 +1,28 @@
+{
+  "name": "opencode-session-manager",
+  "version": "1.0.0",
+  "description": "List OpenCode sessions and generate an HTML table to easily copy and open any session to continue the conversation",
+  "main": "src/index.js",
+  "bin": {
+    "opencode-sessions": "bin/opencode-sessions"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "opencode",
+    "session",
+    "manager",
+    "cli",
+    "html"
+  ],
+  "author": "Jiayixiao20",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jiayixiao20/opencode-session-manager.git"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

@@ -1,0 +1,100 @@
+# OpenCode Session Manager
+
+A CLI tool that lists all your OpenCode sessions and generates an HTML table, making it easy to copy and open a specific session to continue your conversation with OpenCode.
+
+## Features
+
+- **Session Listing**: Lists all your OpenCode sessions from the local database
+- **Copy & Open**: One-click copy of `opencode -s <session-id>` to continue any session
+- **HTML Table**: Generates a beautiful, searchable HTML page for browsing sessions
+- **Cross-Platform**: Works on Linux, macOS, and Windows
+- **Search & Filter**: Search by session name and filter by time range
+- **Zero Dependencies**: Only requires Node.js and sqlite3
+- **Bookmark-Friendly**: Once generated, bookmark the HTML file in your browser for instant access to all sessions
+- **Customizable**: Override database and output paths via environment variables
+
+## Installation
+
+### One-Line Install (Linux/macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Jiayixiao20/opencode-session-manager/main/install.sh | bash
+```
+
+### Manual Install
+
+```bash
+git clone https://github.com/Jiayixiao20/opencode-session-manager.git
+cd opencode-session-manager
+npm link
+```
+
+### Windows
+
+```powershell
+npm install -g opencode-session-manager
+```
+
+## Usage
+
+### Basic Usage
+
+```bash
+opencode-sessions
+```
+
+This will generate `sessions.html` in your `Downloads` folder.
+
+**💡 Tip:** After generating, open the HTML file in your browser and bookmark it. This gives you instant access to all your OpenCode sessions anytime.
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OPENCODE_DB` | Path to OpenCode database | Auto-detected by OS |
+| `OPENCODE_SESSIONS_OUTPUT` | Output HTML file path | `~/Downloads/sessions.html` |
+
+### Custom Database Path
+
+```bash
+OPENCODE_DB=/path/to/opencode.db opencode-sessions
+```
+
+### Custom Output Path
+
+```bash
+OPENCODE_SESSIONS_OUTPUT=/path/to/output.html opencode-sessions
+```
+
+## Database Paths by OS
+
+| OS | Default Path |
+|----|--------------|
+| Linux | `~/.local/share/opencode/opencode.db` |
+| macOS | `~/Library/Application Support/opencode/opencode.db` |
+| Windows | `%APPDATA%\opencode\opencode.db` |
+
+## HTML Features
+
+- **Session Table**: Displays session ID (shortened), summary, message count, and last active time
+- **Copy Button**: Click 📋 to copy the full `opencode -s <id>` command
+- **Search**: Real-time search across session names and summaries
+- **Time Filter**: Filter by Today, 3 Days, 7 Days, 30 Days, or All
+- **Sorting**: Sessions sorted by last active time (newest first)
+
+## Requirements
+
+- Node.js 14+
+- sqlite3 command-line tool
+
+## License
+
+MIT
+
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+
+## Support
+
+If you encounter any issues or have suggestions, please [open an issue](https://github.com/Jiayixiao20/opencode-session-manager/issues).
