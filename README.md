@@ -7,7 +7,8 @@ A CLI tool that lists all your OpenCode sessions and generates an HTML table, ma
 - **Session Listing**: Lists all your OpenCode sessions from the local database
 - **Copy & Open**: One-click copy of `opencode -s <session-id>` to continue any session
 - **HTML Table**: Generates a beautiful, searchable HTML page for browsing sessions
-- **Delete Sessions**: Delete old or low-value sessions and reclaim disk space
+- **Interactive Delete**: Click 🗑️ in the HTML table to delete sessions via a local server
+- **Delete Sessions**: Delete old or low-value sessions and reclaim disk space from the CLI
 - **Cross-Platform**: Works on Linux, macOS, and Windows
 - **Search & Filter**: Search by session name and filter by time range
 - **Zero Dependencies**: Only requires Node.js and sqlite3
@@ -48,7 +49,23 @@ This will generate `sessions.html` in your `Downloads` folder.
 
 **💡 Tip:** After generating, open the HTML file in your browser and bookmark it. This gives you instant access to all your OpenCode sessions anytime.
 
-### Delete Sessions
+### Interactive Web UI
+
+Start a local server to open the HTML table in your browser with delete buttons on every row:
+
+```bash
+opencode-sessions serve
+```
+
+Then open `http://localhost:8765` in your browser. Click 🗑️ to delete a session; the page will update immediately and the database file will be vacuumed to reclaim space.
+
+You can change the port with the environment variable:
+
+```bash
+OPENCODE_SESSIONS_PORT=8080 opencode-sessions serve
+```
+
+### Delete from Command Line
 
 Free up disk space by deleting old or low-value sessions.
 

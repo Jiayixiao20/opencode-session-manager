@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
 const { execSync } = require("child_process")
-const { writeFileSync, statSync } = require("fs")
+const { writeFileSync, createReadStream, existsSync } = require("fs")
 const path = require("path")
 const os = require("os")
 const readline = require("readline")
+const http = require("http")
+const { parse: parseUrl } = require("url")
 
 function getDbPath() {
   const home = os.homedir()
@@ -211,7 +213,7 @@ function buildSessionRow(sessions, index) {
     : ""
 
   return `
-    <tr data-search="${escapeHtml((s.id + " " + s.summary).toLowerCase())}" data-time="${s.updated}">
+    <tr data-search="${escapeHtml((s.id + " " + s.summary).toLowerCase())}" data-time="${s.updated}" data-id="${escapeHtml(s.id)}">
       <td>${index + 1}</td>
       <td>
         <code style="font-size:12px;">opencode -s ${escapeHtml(shortenId(s.id))}</code>
@@ -221,6 +223,9 @@ function buildSessionRow(sessions, index) {
       <td>${s.messageCount}</td>
       <td>${formatDate(s.created)}</td>
       <td>${s.lastActive}</td>
+      <td style="width: 90px;">
+        <button class="delete-btn" onclick="deleteSession('${s.id}')" title="Delete this session">🗑️</button>
+      </td>
     </tr>`
 }
 
@@ -365,6 +370,47 @@ function generateHTML(sessions) {
       opacity: 1;
       background: #f0f0f0;
     }
+    .delete-btn {
+      padding: 2px 6px;
+      font-size: 12px;
+      cursor: pointer;
+      background: none;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+    .delete-btn:hover {
+      opacity: 1;
+      background: #fce8e6;
+      border-color: #d93025;
+    }
+    .delete-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 18px;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #fff;
+      background: #333;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s;
+      z-index: 1000;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .toast.error {
+      background: #d93025;
+    }
     .summary {
       color: #666;
       max-width: 500px;
@@ -425,6 +471,7 @@ function generateHTML(sessions) {
           <th style="width: 80px;">Msgs</th>
           <th style="width: 130px;">Created</th>
           <th style="width: 120px;">Last Active</th>
+          <th style="width: 90px;">Action</th>
         </tr>
       </thead>
       <tbody id="tbody">
@@ -433,6 +480,7 @@ function generateHTML(sessions) {
     </table>`
     }
     <div class="meta">${sessions.length} sessions · Generated ${formatDate(Date.now())}</div>
+    <div id="toast" class="toast"></div>
   </div>
   <script>
     const searchInput = document.getElementById('search');
@@ -489,6 +537,41 @@ function generateHTML(sessions) {
         btn.textContent = '✓';
         setTimeout(() => btn.textContent = original, 1500);
       });
+    }
+
+    const toast = document.getElementById('toast');
+    function showToast(message, isError = false) {
+      toast.textContent = message;
+      toast.className = 'toast' + (isError ? ' error' : '');
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    async function deleteSession(id) {
+      if (!confirm('Delete this session? This cannot be undone.')) {
+        return;
+      }
+
+      const row = document.querySelector('tr[data-id="' + id + '"]');
+      const btn = row ? row.querySelector('.delete-btn') : null;
+      if (btn) btn.disabled = true;
+
+      try {
+        const response = await fetch('/delete/' + id, { method: 'POST' });
+        if (response.ok) {
+          showToast('Session deleted');
+          if (row) row.remove();
+          filterRows();
+          await fetch('/refresh', { method: 'POST' }).catch(() => {});
+        } else {
+          const text = await response.text();
+          showToast('Delete failed: ' + text, true);
+          if (btn) btn.disabled = false;
+        }
+      } catch (err) {
+        showToast('Delete failed: ' + err.message, true);
+        if (btn) btn.disabled = false;
+      }
     }
   </script>
 </body>
@@ -580,6 +663,7 @@ Usage:
   opencode-sessions delete --older-than 30   Delete sessions older than 30 days
   opencode-sessions delete --min-messages 1  Delete sessions with 1 or fewer messages
   opencode-sessions delete --older-than 30 --min-messages 1
+  opencode-sessions serve                    Start local web server for interactive HTML
 
 Delete options:
   -d, --older-than <days>   Delete sessions not updated in the last N days
@@ -587,6 +671,9 @@ Delete options:
   -n, --dry-run             Show what would be deleted without deleting
   -f, --force               Skip confirmation prompt
       --no-vacuum           Skip VACUUM after deletion
+
+Server options:
+  OPENCODE_SESSIONS_PORT    Port for the local server (default: 8765)
 
 Environment variables:
   OPENCODE_DB               Path to OpenCode database
@@ -651,21 +738,31 @@ async function handleDelete(options) {
     }
   }
 
+  const result = await performDelete(targets, options.vacuum)
+
+  if (result.success > 0 && result.failed.length === 0 && options.exitCode !== false) {
+    process.exit(0)
+  }
+}
+
+async function performDelete(targets, shouldVacuum = true) {
   const sizeBefore = getDbSize()
   console.log(`\nDatabase size before: ${formatBytes(sizeBefore)}`)
 
-  let deleted = 0
+  let success = 0
+  const failed = []
   for (const s of targets) {
     if (deleteSessionById(s.id)) {
-      deleted++
+      success++
     } else {
       console.error(`Failed to delete session: ${s.id}`)
+      failed.push(s.id)
     }
   }
 
-  console.log(`✓ Deleted ${deleted}/${targets.length} session(s)`)
+  console.log(`✓ Deleted ${success}/${targets.length} session(s)`)
 
-  if (options.vacuum && deleted > 0) {
+  if (shouldVacuum && success > 0) {
     vacuumDatabase()
     const sizeAfter = getDbSize()
     console.log(`Database size after:  ${formatBytes(sizeAfter)}`)
@@ -673,6 +770,82 @@ async function handleDelete(options) {
       console.log(`Reclaimed:            ${formatBytes(sizeBefore - sizeAfter)}`)
     }
   }
+
+  return { success, failed, sizeBefore, sizeAfter: getDbSize() }
+}
+
+async function handleServe() {
+  const port = parseInt(process.env.OPENCODE_SESSIONS_PORT) || 8765
+  const outputPath = getDefaultOutputPath()
+
+  if (!existsSync(outputPath)) {
+    console.log(`Output file not found, generating ${outputPath}...`)
+    const sessions = getSessionsWithStats().filter((s) => s.messageCount > 1)
+    const html = generateHTML(sessions)
+    writeFileSync(outputPath, html, "utf-8")
+  }
+
+  const server = http.createServer(async (req, res) => {
+    const { pathname } = parseUrl(req.url, true)
+
+    res.setHeader("Access-Control-Allow-Origin", "*")
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204)
+      res.end()
+      return
+    }
+
+    if (req.method === "POST" && pathname.startsWith("/delete/")) {
+      const id = pathname.slice("/delete/".length)
+      if (!validateSessionId(id)) {
+        res.writeHead(400)
+        res.end("Invalid session ID")
+        return
+      }
+
+      const session = getSessionById(id)
+      if (!session) {
+        res.writeHead(404)
+        res.end("Session not found")
+        return
+      }
+
+      const result = await performDelete([session], true)
+      if (result.success > 0) {
+        res.writeHead(200)
+        res.end("OK")
+      } else {
+        res.writeHead(500)
+        res.end("Delete failed")
+      }
+      return
+    }
+
+    if (pathname === "/refresh") {
+      try {
+        const sessions = getSessionsWithStats().filter((s) => s.messageCount > 1)
+        const html = generateHTML(sessions)
+        writeFileSync(outputPath, html, "utf-8")
+        res.writeHead(200)
+        res.end("OK")
+      } catch (err) {
+        res.writeHead(500)
+        res.end(err.message)
+      }
+      return
+    }
+
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
+    createReadStream(outputPath).pipe(res)
+  })
+
+  server.listen(port, () => {
+    console.log(`Session server running at http://localhost:${port}`)
+    console.log(`Open this URL in your browser to view and delete sessions`)
+  })
 }
 
 async function handleGenerate() {
@@ -687,6 +860,7 @@ async function handleGenerate() {
 
   console.log(`✓ Generated ${outputPath}`)
   console.log(`  ${sessions.length} valid sessions`)
+  console.log(`\nTip: run "opencode-sessions serve" to open an interactive page with delete buttons`)
 }
 
 async function main() {
@@ -701,6 +875,10 @@ async function main() {
     case "delete":
     case "rm":
       await handleDelete(options)
+      break
+    case "serve":
+    case "server":
+      await handleServe()
       break
     case "help":
     case "--help":

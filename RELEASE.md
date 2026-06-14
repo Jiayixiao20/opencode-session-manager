@@ -4,13 +4,23 @@ A CLI tool that lists all your OpenCode sessions and generates an HTML table, ma
 
 ### What's New
 
+- **Interactive Delete**: HTML table now includes 🗑️ delete buttons when served via `opencode-sessions serve`
+- **Local Server**: New `serve` command starts a web UI for interactive session management
 - **Session Deletion**: Delete specific sessions or bulk-delete by age and message count
 - **Disk Space Reclaim**: Automatic `VACUUM` after deletion shrinks the database file
 - **Dry Run Mode**: Preview deletions before committing
 - **Safe Defaults**: Confirmation prompt before deletion (skip with `--force`)
 - **Low-Value Highlight**: HTML table tags sessions with only one message
 
-### Delete Usage
+### Interactive Web UI
+
+```bash
+opencode-sessions serve
+```
+
+Open `http://localhost:8765` and click 🗑️ to delete sessions directly from the browser.
+
+### Delete from Command Line
 
 ```bash
 # Delete a specific session
