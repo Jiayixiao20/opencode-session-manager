@@ -7,6 +7,7 @@ A CLI tool that lists all your OpenCode sessions and generates an HTML table, ma
 - **Session Listing**: Lists all your OpenCode sessions from the local database
 - **Copy & Open**: One-click copy of `opencode -s <session-id>` to continue any session
 - **HTML Table**: Generates a beautiful, searchable HTML page for browsing sessions
+- **Delete Sessions**: Delete old or low-value sessions and reclaim disk space
 - **Cross-Platform**: Works on Linux, macOS, and Windows
 - **Search & Filter**: Search by session name and filter by time range
 - **Zero Dependencies**: Only requires Node.js and sqlite3
@@ -46,6 +47,37 @@ opencode-sessions
 This will generate `sessions.html` in your `Downloads` folder.
 
 **💡 Tip:** After generating, open the HTML file in your browser and bookmark it. This gives you instant access to all your OpenCode sessions anytime.
+
+### Delete Sessions
+
+Free up disk space by deleting old or low-value sessions.
+
+```bash
+# Delete a specific session
+opencode-sessions delete <session-id>
+
+# Preview sessions with 1 or fewer messages (no deletion)
+opencode-sessions delete --min-messages 1 --dry-run
+
+# Delete sessions older than 30 days
+opencode-sessions delete --older-than 30
+
+# Delete low-value sessions without confirmation
+opencode-sessions delete --min-messages 1 --force
+
+# Delete old, low-value sessions and skip VACUUM
+opencode-sessions delete --older-than 30 --min-messages 1 --no-vacuum
+```
+
+Delete options:
+
+| Option | Description |
+|--------|-------------|
+| `-d, --older-than <days>` | Delete sessions not updated in the last N days |
+| `-m, --min-messages <n>` | Delete sessions with N or fewer messages |
+| `-n, --dry-run` | Preview what would be deleted without making changes |
+| `-f, --force` | Skip the confirmation prompt |
+| `--no-vacuum` | Skip `VACUUM` after deletion (faster, but does not shrink the database file) |
 
 ### Environment Variables
 

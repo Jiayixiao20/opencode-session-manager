@@ -7,10 +7,11 @@
 - **会话列表**：从本地数据库列出所有 OpenCode 会话
 - **复制并打开**：一键复制 `opencode -s <会话ID>`，随时继续任何会话
 - **HTML 表格**：生成美观、可搜索的 HTML 页面，方便浏览所有会话
+- **删除会话**：删除旧会话或无价值会话，释放磁盘空间
 - **跨平台**：支持 Linux、macOS 和 Windows
 - **搜索与筛选**：按会话名搜索，按时间范围筛选
 - **零依赖**：仅需 Node.js 和 sqlite3
-- **收藏夹支持**：生成后将 HTML 文件添加到浏览器收藏夹，随时查看所有会话
+- **收藏夹支持**：生成后将 HTML 文件添加到浏览器收藏夹，随时都能查看所有 OpenCode 会话
 - **可自定义**：通过环境变量覆盖数据库和输出路径
 
 ## 安装
@@ -46,6 +47,37 @@ opencode-sessions
 这会在你的 `Downloads` 文件夹生成 `sessions.html`。
 
 **💡 提示：** 生成后，用浏览器打开该 HTML 文件并添加到收藏夹，随时都能查看所有 OpenCode 会话。
+
+### 删除会话
+
+通过删除旧会话或低价值会话来释放磁盘空间。
+
+```bash
+# 删除指定会话
+opencode-sessions delete <会话ID>
+
+# 预览消息数 ≤ 1 的会话（不会真正删除）
+opencode-sessions delete --min-messages 1 --dry-run
+
+# 删除 30 天未更新的会话
+opencode-sessions delete --older-than 30
+
+# 强制删除低价值会话，不询问确认
+opencode-sessions delete --min-messages 1 --force
+
+# 删除旧且低价值的会话，并跳过 VACUUM
+opencode-sessions delete --older-than 30 --min-messages 1 --no-vacuum
+```
+
+删除选项：
+
+| 选项 | 说明 |
+|------|------|
+| `-d, --older-than <天数>` | 删除最近 N 天内未更新的会话 |
+| `-m, --min-messages <数量>` | 删除消息数 ≤ N 的会话 |
+| `-n, --dry-run` | 只预览将要删除的内容，不执行删除 |
+| `-f, --force` | 跳过确认提示 |
+| `--no-vacuum` | 删除后不执行 `VACUUM`（更快，但不会缩小数据库文件） |
 
 ### 环境变量
 

@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 
 const { execSync } = require("child_process")
-const { writeFileSync } = require("fs")
+const { writeFileSync, statSync } = require("fs")
 const path = require("path")
 const os = require("os")
+const readline = require("readline")
 
 function getDbPath() {
   const home = os.homedir()
-  
+
   if (process.env.OPENCODE_DB) {
     return process.env.OPENCODE_DB
   }
-  
+
   switch (process.platform) {
     case "darwin":
       return path.join(home, "Library/Application Support/opencode/opencode.db")
@@ -25,11 +26,11 @@ function getDbPath() {
 function getDefaultOutputPath() {
   const home = os.homedir()
   const customPath = process.env.OPENCODE_SESSIONS_OUTPUT
-  
+
   if (customPath) {
     return customPath
   }
-  
+
   return path.join(home, "Downloads", "sessions.html")
 }
 
@@ -37,6 +38,13 @@ function formatDate(timestamp) {
   const date = new Date(timestamp)
   const pad = (n) => String(n).padStart(2, "0")
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`
 }
 
 function escapeHtml(text) {
@@ -56,14 +64,44 @@ function shortenId(id) {
   return id.slice(0, 12) + "..."
 }
 
-function query(sql) {
+function validateSessionId(id) {
+  return typeof id === "string" && /^[a-zA-Z0-9_]+$/.test(id)
+}
+
+function escapeSqlString(value) {
+  return String(value).replace(/'/g, "''")
+}
+
+function execSql(sql) {
   const dbPath = getDbPath()
+  return execSync(`sqlite3 "${dbPath}" "${sql}"`, { encoding: "utf-8" })
+}
+
+function query(sql) {
   try {
-    const output = execSync(`sqlite3 "${dbPath}" "${sql}"`, { encoding: "utf-8" })
+    const output = execSql(sql)
     return output.trim().split("\n").filter(Boolean)
   } catch (err) {
     console.error(`Error querying database: ${err.message}`)
     return []
+  }
+}
+
+function execute(sql) {
+  try {
+    execSql(sql)
+    return true
+  } catch (err) {
+    console.error(`Error executing SQL: ${err.message}`)
+    return false
+  }
+}
+
+function getDbSize() {
+  try {
+    return statSync(getDbPath()).size
+  } catch {
+    return 0
   }
 }
 
@@ -86,17 +124,44 @@ function getSessions() {
   })
 }
 
-function getMessageCount(sessionId) {
+function getSessionById(sessionId) {
+  if (!validateSessionId(sessionId)) {
+    console.error(`Invalid session ID: ${sessionId}`)
+    return null
+  }
+
   const rows = query(`
-    SELECT COUNT(*) FROM message WHERE session_id = '${sessionId}'
+    SELECT id, title, time_created, time_updated
+    FROM session
+    WHERE id = '${escapeSqlString(sessionId)}' AND time_archived IS NULL
+  `)
+
+  if (rows.length === 0) return null
+
+  const [id, title, created, updated] = rows[0].split("|")
+  return {
+    id,
+    title: title || "(Untitled)",
+    created: parseInt(created),
+    updated: parseInt(updated),
+  }
+}
+
+function getMessageCount(sessionId) {
+  if (!validateSessionId(sessionId)) return 0
+
+  const rows = query(`
+    SELECT COUNT(*) FROM message WHERE session_id = '${escapeSqlString(sessionId)}'
   `)
   return parseInt(rows[0] || "0")
 }
 
 function getFirstUserMessage(sessionId) {
+  if (!validateSessionId(sessionId)) return ""
+
   const rows = query(`
     SELECT data FROM message
-    WHERE session_id = '${sessionId}'
+    WHERE session_id = '${escapeSqlString(sessionId)}'
     ORDER BY time_created ASC
     LIMIT 5
   `)
@@ -118,21 +183,50 @@ function getFirstUserMessage(sessionId) {
   return ""
 }
 
-function generateHTML(sessions) {
-  const rows = sessions
-    .map(
-      (s, index) => `
+function enableForeignKeys() {
+  return execute("PRAGMA foreign_keys = ON")
+}
+
+function deleteSessionById(sessionId) {
+  if (!validateSessionId(sessionId)) return false
+  return execute(`PRAGMA foreign_keys = ON; DELETE FROM session WHERE id = '${escapeSqlString(sessionId)}'`)
+}
+
+function vacuumDatabase() {
+  console.log("Running VACUUM to reclaim disk space...")
+  try {
+    execSql("VACUUM")
+    console.log("✓ VACUUM complete")
+    return true
+  } catch (err) {
+    console.error(`VACUUM failed: ${err.message}`)
+    return false
+  }
+}
+
+function buildSessionRow(sessions, index) {
+  const s = sessions[index]
+  const lowValueBadge = s.messageCount <= 1
+    ? `<span class="low-value" title="Only ${s.messageCount} message(s)">low value</span>`
+    : ""
+
+  return `
     <tr data-search="${escapeHtml((s.id + " " + s.summary).toLowerCase())}" data-time="${s.updated}">
       <td>${index + 1}</td>
       <td>
         <code style="font-size:12px;">opencode -s ${escapeHtml(shortenId(s.id))}</code>
         <button class="copy-btn" onclick="copyText('opencode -s ${s.id}')" title="Copy full command">📋</button>
       </td>
-      <td class="summary">${escapeHtml(s.summary)}</td>
+      <td class="summary">${escapeHtml(s.summary)}${lowValueBadge}</td>
       <td>${s.messageCount}</td>
+      <td>${formatDate(s.created)}</td>
       <td>${s.lastActive}</td>
     </tr>`
-    )
+}
+
+function generateHTML(sessions) {
+  const rows = sessions
+    .map((_, index) => buildSessionRow(sessions, index))
     .join("")
 
   return `<!DOCTYPE html>
@@ -273,7 +367,7 @@ function generateHTML(sessions) {
     }
     .summary {
       color: #666;
-      max-width: 600px;
+      max-width: 500px;
       word-break: break-word;
       line-height: 1.5;
     }
@@ -288,6 +382,17 @@ function generateHTML(sessions) {
       font-size: 12px;
       color: #999;
       text-align: right;
+    }
+    .low-value {
+      color: #d93025;
+      font-size: 11px;
+      font-weight: 500;
+      margin-left: 6px;
+      border: 1px solid #fad2cf;
+      background: #fce8e6;
+      padding: 1px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
     }
   </style>
 </head>
@@ -315,9 +420,10 @@ function generateHTML(sessions) {
       <thead>
         <tr>
           <th style="width: 50px;">#</th>
-          <th style="width: 200px;">Session</th>
+          <th style="width: 220px;">Session</th>
           <th>Summary</th>
           <th style="width: 80px;">Msgs</th>
+          <th style="width: 130px;">Created</th>
           <th style="width: 120px;">Last Active</th>
         </tr>
       </thead>
@@ -343,15 +449,15 @@ function generateHTML(sessions) {
       rows.forEach(row => {
         const searchable = row.getAttribute('data-search') || '';
         const time = parseInt(row.getAttribute('data-time') || '0');
-        
+
         const matchesSearch = searchable.includes(query);
         let matchesTime = true;
-        
+
         if (currentDays !== 'all') {
           const cutoff = now - parseInt(currentDays) * 24 * 60 * 60 * 1000;
           matchesTime = time >= cutoff;
         }
-        
+
         if (matchesSearch && matchesTime) {
           row.classList.remove('hidden');
           visible++;
@@ -389,40 +495,226 @@ function generateHTML(sessions) {
 </html>`
 }
 
-function main() {
-  console.log("Reading session data...")
-
+function getSessionsWithStats() {
   const sessions = getSessions()
-  console.log(`Found ${sessions.length} sessions`)
-
-  const results = []
-  for (const session of sessions) {
+  return sessions.map((session) => {
     const messageCount = getMessageCount(session.id)
-    if (messageCount <= 1) {
-      continue
-    }
-
     let summary = getFirstUserMessage(session.id)
-    
+
     if (!summary && session.title && session.title.toLowerCase().includes('lookup')) {
       summary = "lookup+" + session.title
     }
 
-    results.push({
+    return {
       id: session.id,
+      title: session.title,
       summary: summary || session.title || "(No summary)",
       messageCount,
-      lastActive: formatDate(session.updated),
+      created: session.created,
       updated: session.updated,
+      lastActive: formatDate(session.updated),
+    }
+  })
+}
+
+function promptConfirm(message) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  })
+
+  return new Promise((resolve) => {
+    rl.question(`${message} (y/N): `, (answer) => {
+      rl.close()
+      resolve(answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes")
+    })
+  })
+}
+
+function parseArgs(argv) {
+  const args = argv.slice(2)
+  const command = args[0] || "generate"
+  const options = {
+    command,
+    ids: [],
+    olderThan: null,
+    minMessages: null,
+    dryRun: false,
+    force: false,
+    vacuum: true,
+  }
+
+  const isFlag = (arg) => arg.startsWith("-")
+
+  for (let i = 1; i < args.length; i++) {
+    const arg = args[i]
+    const next = args[i + 1]
+
+    if (arg === "--older-than" || arg === "-d") {
+      options.olderThan = parseInt(next)
+      i++
+    } else if (arg === "--min-messages" || arg === "-m") {
+      options.minMessages = parseInt(next)
+      i++
+    } else if (arg === "--dry-run" || arg === "-n") {
+      options.dryRun = true
+    } else if (arg === "--force" || arg === "-f") {
+      options.force = true
+    } else if (arg === "--no-vacuum") {
+      options.vacuum = false
+    } else if (!isFlag(arg)) {
+      options.ids.push(arg)
+    }
+  }
+
+  return options
+}
+
+function printUsage() {
+  console.log(`
+OpenCode Session Manager
+
+Usage:
+  opencode-sessions                          Generate sessions.html (default)
+  opencode-sessions delete <id>              Delete a specific session
+  opencode-sessions delete --older-than 30   Delete sessions older than 30 days
+  opencode-sessions delete --min-messages 1  Delete sessions with 1 or fewer messages
+  opencode-sessions delete --older-than 30 --min-messages 1
+
+Delete options:
+  -d, --older-than <days>   Delete sessions not updated in the last N days
+  -m, --min-messages <n>    Delete sessions with N or fewer messages
+  -n, --dry-run             Show what would be deleted without deleting
+  -f, --force               Skip confirmation prompt
+      --no-vacuum           Skip VACUUM after deletion
+
+Environment variables:
+  OPENCODE_DB               Path to OpenCode database
+  OPENCODE_SESSIONS_OUTPUT  Output HTML file path
+`)
+}
+
+async function handleDelete(options) {
+  if (options.ids.length > 0 && (options.olderThan || options.minMessages !== null)) {
+    console.error("Error: Cannot combine specific session IDs with --older-than or --min-messages")
+    process.exit(1)
+  }
+
+  const stats = getSessionsWithStats()
+  let targets = []
+
+  if (options.ids.length > 0) {
+    for (const id of options.ids) {
+      const session = stats.find((s) => s.id === id) || getSessionById(id)
+      if (!session) {
+        console.error(`Session not found: ${id}`)
+        process.exit(1)
+      }
+      targets.push(session)
+    }
+  } else {
+    const now = Date.now()
+    targets = stats.filter((s) => {
+      if (options.olderThan && s.updated >= now - options.olderThan * 24 * 60 * 60 * 1000) {
+        return false
+      }
+      if (options.minMessages !== null && s.messageCount > options.minMessages) {
+        return false
+      }
+      return true
     })
   }
 
+  if (targets.length === 0) {
+    console.log("No sessions match the given criteria.")
+    return
+  }
+
+  const totalMessages = targets.reduce((sum, s) => sum + s.messageCount, 0)
+
+  console.log(`\nFound ${targets.length} session(s) to delete:`)
+  for (const s of targets) {
+    console.log(`  - ${shortenId(s.id)} | ${s.messageCount} msgs | ${s.summary}`)
+  }
+  console.log(`  Total messages: ${totalMessages}`)
+
+  if (options.dryRun) {
+    console.log("\n--dry-run: no changes made")
+    return
+  }
+
+  if (!options.force) {
+    const confirmed = await promptConfirm(`\nDelete ${targets.length} session(s)?`)
+    if (!confirmed) {
+      console.log("Cancelled")
+      return
+    }
+  }
+
+  const sizeBefore = getDbSize()
+  console.log(`\nDatabase size before: ${formatBytes(sizeBefore)}`)
+
+  let deleted = 0
+  for (const s of targets) {
+    if (deleteSessionById(s.id)) {
+      deleted++
+    } else {
+      console.error(`Failed to delete session: ${s.id}`)
+    }
+  }
+
+  console.log(`✓ Deleted ${deleted}/${targets.length} session(s)`)
+
+  if (options.vacuum && deleted > 0) {
+    vacuumDatabase()
+    const sizeAfter = getDbSize()
+    console.log(`Database size after:  ${formatBytes(sizeAfter)}`)
+    if (sizeAfter < sizeBefore) {
+      console.log(`Reclaimed:            ${formatBytes(sizeBefore - sizeAfter)}`)
+    }
+  }
+}
+
+async function handleGenerate() {
+  console.log("Reading session data...")
+
+  const sessions = getSessionsWithStats().filter((s) => s.messageCount > 1)
+  console.log(`Found ${sessions.length} valid sessions`)
+
   const outputPath = getDefaultOutputPath()
-  const html = generateHTML(results)
+  const html = generateHTML(sessions)
   writeFileSync(outputPath, html, "utf-8")
 
   console.log(`✓ Generated ${outputPath}`)
-  console.log(`  ${results.length} valid sessions`)
+  console.log(`  ${sessions.length} valid sessions`)
 }
 
-main()
+async function main() {
+  const options = parseArgs(process.argv)
+
+  switch (options.command) {
+    case "generate":
+    case "gen":
+    case "html":
+      await handleGenerate()
+      break
+    case "delete":
+    case "rm":
+      await handleDelete(options)
+      break
+    case "help":
+    case "--help":
+    case "-h":
+      printUsage()
+      break
+    default:
+      console.error(`Unknown command: ${options.command}`)
+      printUsage()
+      process.exit(1)
+  }
+}
+
+main().catch((err) => {
+  console.error(err.message)
+  process.exit(1)
+})
