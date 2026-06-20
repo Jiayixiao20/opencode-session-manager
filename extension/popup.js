@@ -3,6 +3,9 @@ const PORT_START = 8765
 const PORT_END = 8876
 const PROBE_TIMEOUT_MS = 1500
 
+// CWS 构建时替换为真实密钥，GitHub 仅为占位符
+const PROVISION_SECRET = 'REPLACE_ME_BEFORE_CWS_BUILD'
+
 async function setServicePort(port) {
   return new Promise((resolve) => {
     chrome.storage.local.set({ servicePort: port }, resolve)
@@ -54,6 +57,17 @@ async function checkService() {
   return scanPorts()
 }
 
+async function provisionSecret(port) {
+  try {
+    await fetch(`http://localhost:${port}/api/license/provision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: PROVISION_SECRET })
+    })
+  } catch {
+  }
+}
+
 async function fetchLicense(port) {
   try {
     const res = await fetch(`http://localhost:${port}/api/license/status`)
@@ -73,6 +87,7 @@ async function updateUI() {
   const { ok, url, port } = await checkService()
 
   if (ok) {
+    await provisionSecret(port)
     const lic = await fetchLicense(port)
     statusEl.textContent = `✓ Service online (port ${port})`
     statusEl.className = 'status ok'
