@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenCode Session Manager</title>
+  <style>
+    body {
+      width: 280px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      margin: 0;
+    }
+    h1 {
+      font-size: 16px;
+      margin: 0 0 12px;
+    }
+    .status {
+      padding: 8px 10px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .status.ok {
+      background: #e6f4ea;
+      color: #1e8e3e;
+    }
+    .status.err {
+      background: #fce8e6;
+      color: #d93025;
+    }
+    .license {
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    .license.pro {
+      background: #e8f0fe;
+      color: #1967d2;
+    }
+    .license.free {
+      background: #fef7e0;
+      color: #e37400;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      background: #333;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+    button:hover {
+      background: #000;
+    }
+    button.install {
+      background: #1967d2;
+    }
+    button.install:hover {
+      background: #1557b0;
+    }
+    button.upgrade {
+      background: #e37400;
+    }
+    button.upgrade:hover {
+      background: #c46400;
+    }
+  </style>
+</head>
+<body>
+  <h1>OpenCode Session Manager</h1>
+  <div id="status" class="status">Checking local service...</div>
+  <div id="license" class="license"></div>
+  <button id="open" style="display:none;">Open Dashboard</button>
+  <button id="install" class="install" style="display:none;">Install Local Service</button>
+  <button id="upgrade" class="upgrade" style="display:none;">Upgrade to Pro</button>
+  <script src="popup.js"></script>
+</body>
+</html>

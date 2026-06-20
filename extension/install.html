@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Install OpenCode Session Manager</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #fafafa;
+      color: #333;
+      line-height: 1.6;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 12px;
+      padding: 40px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    h1 { font-size: 24px; margin-bottom: 12px; }
+    p { margin-bottom: 16px; }
+    .step {
+      margin-bottom: 28px;
+    }
+    .step h2 {
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+    code {
+      display: block;
+      background: #f5f5f5;
+      padding: 12px;
+      border-radius: 6px;
+      font-family: "SF Mono", Monaco, monospace;
+      font-size: 13px;
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+    .btn {
+      display: inline-block;
+      padding: 10px 18px;
+      background: #333;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .note {
+      font-size: 13px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Install the local service</h1>
+    <p>The OpenCode Session Manager browser extension needs a small local service to read your OpenCode database. This service runs only on your machine and does not send data anywhere.</p>
+
+    <div class="step">
+      <h2>1. Requirements</h2>
+      <p class="note">Node.js 18+ and sqlite3 are required.</p>
+    </div>
+
+    <div class="step">
+      <h2>2. Install on macOS / Linux</h2>
+      <code>curl -fsSL https://raw.githubusercontent.com/Jiayixiao20/opencode-session-manager/main/install.sh | bash</code>
+      <p class="note">This installs the CLI, registers it for auto-start, and starts the service.</p>
+    </div>
+
+    <div class="step">
+      <h2>3. Install on Windows</h2>
+      <code>powershell -Command "& { Invoke-WebRequest -Uri https://raw.githubusercontent.com/Jiayixiao20/opencode-session-manager/main/install.ps1 -UseBasicParsing | Invoke-Expression }"</code>
+      <p class="note">Windows auto-start support is coming soon. After install, run <b>opencode-sessions serve</b> in PowerShell.</p>
+    </div>
+
+    <div class="step">
+      <h2>4. Verify</h2>
+      <p class="note">Open <a href="http://localhost:8765" target="_blank">http://localhost:8765</a> in your browser. If it loads, click the extension icon.</p>
+    </div>
+
+    <div class="step">
+      <h2>5. Custom database path?</h2>
+      <code>OPENCODE_DB=/path/to/opencode.db opencode-sessions serve</code>
+    </div>
+  </div>
+</body>
+</html>

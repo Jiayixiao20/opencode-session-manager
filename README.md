@@ -9,11 +9,17 @@ A CLI tool that lists all your OpenCode sessions and generates an HTML table, ma
 - **HTML Table**: Generates a beautiful, searchable HTML page for browsing sessions
 - **Interactive Delete**: Click 🗑️ in the HTML table to delete sessions via a local server
 - **Delete Sessions**: Delete old or low-value sessions and reclaim disk space from the CLI
+- **Chrome Extension**: One-click popup to open the local dashboard and check service status
+- **Auto-Start Service**: systemd/launchd/Task Scheduler support keeps the local UI running
 - **Cross-Platform**: Works on Linux, macOS, and Windows
 - **Search & Filter**: Search by session name and filter by time range
 - **Zero Dependencies**: Only requires Node.js and sqlite3
 - **Bookmark-Friendly**: Once generated, bookmark the HTML file in your browser for instant access to all sessions
 - **Customizable**: Override database and output paths via environment variables
+
+## Chrome Extension
+
+Install the extension from the Chrome Web Store (link coming soon), then install the local service below. The extension will detect the service and open your session dashboard.
 
 ## Installation
 
@@ -34,8 +40,12 @@ npm link
 ### Windows
 
 ```powershell
-npm install -g opencode-session-manager
+# Run in PowerShell as Administrator (or use Task Scheduler manually)
+irm https://raw.githubusercontent.com/Jiayixiao20/opencode-session-manager/main/install.ps1 | iex
 ```
+
+This installs the service to `%USERPROFILE%\.opencode-session-manager` and creates
+a Task Scheduler entry to auto-start `opencode-sessions serve` at logon.
 
 ## Usage
 
@@ -64,6 +74,25 @@ You can change the port with the environment variable:
 ```bash
 OPENCODE_SESSIONS_PORT=8080 opencode-sessions serve
 ```
+
+### Auto-Start on Boot (Linux systemd)
+
+The installer sets up a systemd user service so the web UI starts automatically on login:
+
+```bash
+# Start/stop/restart
+systemctl --user start opencode-session-manager
+systemctl --user stop opencode-session-manager
+systemctl --user restart opencode-session-manager
+
+# Check status
+systemctl --user status opencode-session-manager
+
+# Disable auto-start
+systemctl --user disable opencode-session-manager
+```
+
+Then open `http://localhost:8765` in your browser.
 
 ### Delete from Command Line
 

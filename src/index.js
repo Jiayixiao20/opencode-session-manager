@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 const { execSync } = require("child_process")
-const { writeFileSync, createReadStream, existsSync } = require("fs")
+const { writeFileSync, createReadStream, existsSync, statSync, readFileSync, mkdirSync } = require("fs")
 const path = require("path")
 const os = require("os")
 const readline = require("readline")
 const http = require("http")
 const { parse: parseUrl } = require("url")
+const crypto = require("crypto")
 
 function getDbPath() {
   const home = os.homedir()
@@ -36,6 +37,93 @@ function getDefaultOutputPath() {
   return path.join(home, "Downloads", "sessions.html")
 }
 
+function getPortFilePath() {
+  return path.join(os.homedir(), ".opencode-session-manager", "port")
+}
+
+function getDefaultPort() {
+  return parseInt(process.env.OPENCODE_SESSIONS_PORT) || 8765
+}
+
+function writePortFile(port) {
+  try {
+    const portFile = getPortFilePath()
+    const dir = path.dirname(portFile)
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true })
+    }
+    writeFileSync(portFile, String(port), "utf-8")
+  } catch (err) {
+    console.error(`Failed to write port file: ${err.message}`)
+  }
+}
+
+const LICENSE_SECRET = "oc-session-mgr-v1-2026"
+
+function getLicensePath() {
+  return path.join(os.homedir(), ".opencode-session-manager", "license")
+}
+
+function validateLicenseKey(key) {
+  if (typeof key !== "string") return false
+  key = key.trim().toUpperCase()
+  if (!/^[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}$/.test(key)) return false
+  const parts = key.split("-")
+  const sig = crypto.createHmac("sha256", LICENSE_SECRET)
+    .update(parts[0] + "-" + parts[1] + "-" + parts[2])
+    .digest("hex").toUpperCase()
+  return sig.startsWith(parts[3])
+}
+
+function readLicense() {
+  const lPath = getLicensePath()
+  try {
+    return JSON.parse(readFileSync(lPath, "utf-8"))
+  } catch {
+    return null
+  }
+}
+
+function writeLicense(data) {
+  const lPath = getLicensePath()
+  const dir = path.dirname(lPath)
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  writeFileSync(lPath, JSON.stringify(data, null, 2), "utf-8")
+}
+
+function getLicenseStatus() {
+  const lic = readLicense()
+  if (lic && lic.type === "pro") {
+    return { type: "pro", activated: lic.activated || null }
+  }
+  return { type: "free", activated: null }
+}
+
+function startServerWithPort(server, preferredPort, callback) {
+  let port = preferredPort
+
+  function tryListen() {
+    server.once("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        port++
+        if (port > preferredPort + 100) {
+          console.error(`Could not find an available port between ${preferredPort} and ${port}`)
+          process.exit(1)
+        }
+        tryListen()
+      } else {
+        throw err
+      }
+    })
+
+    server.listen(port, () => {
+      writePortFile(port)
+      callback(port)
+    })
+  }
+
+  tryListen()
+}
 function formatDate(timestamp) {
   const date = new Date(timestamp)
   const pad = (n) => String(n).padStart(2, "0")
@@ -183,10 +271,6 @@ function getFirstUserMessage(sessionId) {
     }
   }
   return ""
-}
-
-function enableForeignKeys() {
-  return execute("PRAGMA foreign_keys = ON")
 }
 
 function deleteSessionById(sessionId) {
@@ -775,7 +859,7 @@ async function performDelete(targets, shouldVacuum = true) {
 }
 
 async function handleServe() {
-  const port = parseInt(process.env.OPENCODE_SESSIONS_PORT) || 8765
+  const preferredPort = getDefaultPort()
   const outputPath = getDefaultOutputPath()
 
   if (!existsSync(outputPath)) {
@@ -784,6 +868,8 @@ async function handleServe() {
     const html = generateHTML(sessions)
     writeFileSync(outputPath, html, "utf-8")
   }
+
+  let actualPort = preferredPort
 
   const server = http.createServer(async (req, res) => {
     const { pathname } = parseUrl(req.url, true)
@@ -799,6 +885,12 @@ async function handleServe() {
     }
 
     if (req.method === "POST" && pathname.startsWith("/delete/")) {
+      const lic = getLicenseStatus()
+      if (lic.type !== "pro") {
+        res.writeHead(402)
+        res.end("Pro license required for delete operations")
+        return
+      }
       const id = pathname.slice("/delete/".length)
       if (!validateSessionId(id)) {
         res.writeHead(400)
@@ -838,11 +930,73 @@ async function handleServe() {
       return
     }
 
+    if (pathname === "/api/sessions") {
+      try {
+        const sessions = getSessionsWithStats().filter((s) => s.messageCount > 1)
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" })
+        res.end(JSON.stringify({ count: sessions.length, sessions }))
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+      return
+    }
+
+    if (pathname === "/api/health") {
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ ok: true, port: actualPort }))
+      return
+    }
+
+    if (pathname === "/api/license/status") {
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify(getLicenseStatus()))
+      return
+    }
+
+    if (pathname === "/api/license/activate" && req.method === "POST") {
+      let body = ""
+      req.on("data", (chunk) => body += chunk)
+      req.on("end", () => {
+        try {
+          const { key } = JSON.parse(body)
+          if (validateLicenseKey(key)) {
+            writeLicense({ key, type: "pro", activated: Date.now() })
+            res.writeHead(200, { "Content-Type": "application/json" })
+            res.end(JSON.stringify({ ok: true, type: "pro" }))
+          } else {
+            res.writeHead(400, { "Content-Type": "application/json" })
+            res.end(JSON.stringify({ ok: false, error: "Invalid license key" }))
+          }
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ error: "Invalid request" }))
+        }
+      })
+      return
+    }
+
+    if (pathname === "/api/license/deactivate" && req.method === "POST") {
+      try {
+        const lPath = getLicensePath()
+        if (existsSync(lPath)) {
+          writeFileSync(lPath, JSON.stringify({ type: "free" }, null, 2), "utf-8")
+        }
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ ok: true, type: "free" }))
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+      return
+    }
+
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
     createReadStream(outputPath).pipe(res)
   })
 
-  server.listen(port, () => {
+  startServerWithPort(server, preferredPort, (port) => {
+    actualPort = port
     console.log(`Session server running at http://localhost:${port}`)
     console.log(`Open this URL in your browser to view and delete sessions`)
   })

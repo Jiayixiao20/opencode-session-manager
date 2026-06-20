@@ -52,6 +52,52 @@ mkdir -p "$BIN_DIR"
 # Create symlink
 ln -sf "$INSTALL_DIR/bin/opencode-sessions" "$BIN_DIR/opencode-sessions"
 
+if command -v systemctl >/dev/null 2>&1; then
+    SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+    mkdir -p "$SYSTEMD_USER_DIR"
+    cp "$INSTALL_DIR/systemd/opencode-session-manager.service" "$SYSTEMD_USER_DIR/"
+    sed -i "s|%h|$HOME|g" "$SYSTEMD_USER_DIR/opencode-session-manager.service"
+    systemctl --user daemon-reload
+    systemctl --user enable opencode-session-manager.service
+    systemctl --user start opencode-session-manager.service
+    echo ""
+    echo "✓ systemd user service installed and started."
+    echo "  Status:     systemctl --user status opencode-session-manager"
+fi
+
+if command -v launchctl >/dev/null 2>&1 && [ "$(uname -s)" = "Darwin" ]; then
+    PLIST_DIR="$HOME/Library/LaunchAgents"
+    mkdir -p "$PLIST_DIR"
+    PLIST_FILE="$PLIST_DIR/com.opencode.session-manager.plist"
+    cat > "$PLIST_FILE" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.opencode.session-manager</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$INSTALL_DIR/bin/opencode-sessions</string>
+        <string>serve</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>$HOME/Library/Logs/opencode-session-manager.log</string>
+    <key>StandardErrorPath</key>
+    <string>$HOME/Library/Logs/opencode-session-manager.log</string>
+</dict>
+</plist>
+EOF
+    launchctl unload "$PLIST_FILE" 2>/dev/null || true
+    launchctl load "$PLIST_FILE"
+    echo ""
+    echo "✓ macOS launchd agent installed and started."
+fi
+
 # Add to PATH if needed
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo ""
@@ -69,6 +115,10 @@ echo "  opencode-sessions serve                    # Open interactive web UI"
 echo "  opencode-sessions delete <session-id>      # Delete a session"
 echo "  opencode-sessions delete --min-messages 1  # Delete low-value sessions"
 echo "  opencode-sessions delete --older-than 30   # Delete sessions older than 30 days"
+echo ""
+echo "Auto-start service:"
+echo "  systemctl --user start opencode-session-manager  # Start now"
+echo "  systemctl --user stop opencode-session-manager   # Stop"
 echo ""
 echo "The HTML file will be saved to:"
 echo "  $HOME/Downloads/sessions.html"
