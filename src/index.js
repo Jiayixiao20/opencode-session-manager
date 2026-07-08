@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { execSync } = require("child_process")
+const { execFileSync } = require("child_process")
 const { writeFileSync, createReadStream, existsSync, statSync, readFileSync, mkdirSync } = require("fs")
 const path = require("path")
 const os = require("os")
@@ -167,15 +167,19 @@ function escapeSqlString(value) {
   return String(value).replace(/'/g, "''")
 }
 
+const MAX_BUFFER = 1024 * 1024 * 64
+
 function execSql(sql) {
   const dbPath = getDbPath()
-  return execSync(`sqlite3 "${dbPath}" "${sql}"`, { encoding: "utf-8" })
+  return execFileSync("sqlite3", [dbPath, sql], { encoding: "utf-8", maxBuffer: MAX_BUFFER })
 }
 
-function query(sql) {
+function queryJson(sql) {
   try {
-    const output = execSql(sql)
-    return output.trim().split("\n").filter(Boolean)
+    const dbPath = getDbPath()
+    const output = execFileSync("sqlite3", ["-json", dbPath, sql], { encoding: "utf-8", maxBuffer: MAX_BUFFER }).trim()
+    if (!output) return []
+    return JSON.parse(output)
   } catch (err) {
     console.error(`Error querying database: ${err.message}`)
     return []
@@ -200,82 +204,27 @@ function getDbSize() {
   }
 }
 
-function getSessions() {
-  const rows = query(`
-    SELECT id, title, time_created, time_updated
-    FROM session
-    WHERE time_archived IS NULL
-    ORDER BY time_updated DESC
-  `)
-
-  return rows.map((row) => {
-    const [id, title, created, updated] = row.split("|")
-    return {
-      id,
-      title: title || "(Untitled)",
-      created: parseInt(created),
-      updated: parseInt(updated),
-    }
-  })
-}
-
 function getSessionById(sessionId) {
   if (!validateSessionId(sessionId)) {
     console.error(`Invalid session ID: ${sessionId}`)
     return null
   }
 
-  const rows = query(`
-    SELECT id, title, time_created, time_updated
+  const rows = queryJson(`
+    SELECT id, title, time_created AS created, time_updated AS updated
     FROM session
     WHERE id = '${escapeSqlString(sessionId)}' AND time_archived IS NULL
   `)
 
   if (rows.length === 0) return null
 
-  const [id, title, created, updated] = rows[0].split("|")
+  const row = rows[0]
   return {
-    id,
-    title: title || "(Untitled)",
-    created: parseInt(created),
-    updated: parseInt(updated),
+    id: row.id,
+    title: row.title || "(Untitled)",
+    created: parseInt(row.created),
+    updated: parseInt(row.updated),
   }
-}
-
-function getMessageCount(sessionId) {
-  if (!validateSessionId(sessionId)) return 0
-
-  const rows = query(`
-    SELECT COUNT(*) FROM message WHERE session_id = '${escapeSqlString(sessionId)}'
-  `)
-  return parseInt(rows[0] || "0")
-}
-
-function getFirstUserMessage(sessionId) {
-  if (!validateSessionId(sessionId)) return ""
-
-  const rows = query(`
-    SELECT data FROM message
-    WHERE session_id = '${escapeSqlString(sessionId)}'
-    ORDER BY time_created ASC
-    LIMIT 5
-  `)
-
-  for (const row of rows) {
-    try {
-      const data = JSON.parse(row)
-      if (data.role === "user") {
-        const parts = data.parts || []
-        const textPart = parts.find((p) => p.type === "text")
-        if (textPart?.text) {
-          return truncate(textPart.text.trim(), 200)
-        }
-      }
-    } catch {
-      continue
-    }
-  }
-  return ""
 }
 
 function deleteSessionById(sessionId) {
@@ -668,23 +617,60 @@ function generateHTML(sessions) {
 }
 
 function getSessionsWithStats() {
-  const sessions = getSessions()
-  return sessions.map((session) => {
-    const messageCount = getMessageCount(session.id)
-    let summary = getFirstUserMessage(session.id)
+  const sessions = queryJson(`
+    SELECT s.id, s.title, s.time_created AS created, s.time_updated AS updated,
+           COUNT(m.session_id) AS messageCount
+    FROM session s
+    LEFT JOIN message m ON s.id = m.session_id
+    WHERE s.time_archived IS NULL
+    GROUP BY s.id
+    ORDER BY s.time_updated DESC
+  `)
 
-    if (!summary && session.title && session.title.toLowerCase().includes('lookup')) {
+  const firstMessages = queryJson(`
+    WITH RankedUserMessages AS (
+      SELECT session_id, data,
+             ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY time_created ASC) AS rn
+      FROM message
+      WHERE json_extract(data, '$.role') = 'user'
+    )
+    SELECT session_id, data
+    FROM RankedUserMessages
+    WHERE rn = 1
+  `)
+
+  const firstMessageMap = new Map()
+  for (const msg of firstMessages) {
+    firstMessageMap.set(msg.session_id, msg.data)
+  }
+
+  return sessions.map((session) => {
+    let summary = ""
+    const dataStr = firstMessageMap.get(session.id)
+    if (dataStr) {
+      try {
+        const data = JSON.parse(dataStr)
+        const parts = data.parts || []
+        const textPart = parts.find((p) => p.type === "text")
+        if (textPart?.text) {
+          summary = truncate(textPart.text.trim(), 200)
+        }
+      } catch {
+      }
+    }
+
+    if (!summary && session.title && session.title.toLowerCase().includes("lookup")) {
       summary = "lookup+" + session.title
     }
 
     return {
       id: session.id,
-      title: session.title,
+      title: session.title || "(Untitled)",
       summary: summary || session.title || "(No summary)",
-      messageCount,
-      created: session.created,
-      updated: session.updated,
-      lastActive: formatDate(session.updated),
+      messageCount: session.messageCount || 0,
+      created: parseInt(session.created),
+      updated: parseInt(session.updated),
+      lastActive: formatDate(parseInt(session.updated)),
     }
   })
 }
