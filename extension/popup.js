@@ -3,18 +3,53 @@ const PORT_START = 8765
 const PORT_END = 8876
 const PROBE_TIMEOUT_MS = 1500
 
-// CWS 构建时替换为真实密钥，GitHub 仅为占位符
-const PROVISION_SECRET = 'REPLACE_ME_BEFORE_CWS_BUILD'
+// ── i18n ──────────────────────────────────────────────────────────────────
+const I18N = {
+  en: {
+    heading: "OpenCode Session Manager",
+    checking: "Checking local service...",
+    online: (port) => `✓ Service online (port ${port})`,
+    offline: "✗ Local service not running",
+    openDashboard: "Open Dashboard",
+    installService: "Install Local Service",
+  },
+  zh: {
+    heading: "OpenCode 会话管理器",
+    checking: "正在检测本地服务...",
+    online: (port) => `✓ 服务运行中（端口 ${port}）`,
+    offline: "✗ 本地服务未运行",
+    openDashboard: "打开控制台",
+    installService: "安装本地服务",
+  },
+}
+
+function detectLang() {
+  return navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en"
+}
+
+function t(key, ...args) {
+  const d = I18N[detectLang()]
+  const v = d[key]
+  return typeof v === "function" ? v(...args) : v
+}
+
+function applyI18n() {
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n")
+    el.textContent = t(key)
+  })
+}
+// ─────────────────────────────────────────────────────────────────────────
+
+async function getStoredPort() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(["servicePort"], (r) => resolve(r.servicePort))
+  })
+}
 
 async function setServicePort(port) {
   return new Promise((resolve) => {
     chrome.storage.local.set({ servicePort: port }, resolve)
-  })
-}
-
-async function getStoredPort() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(['servicePort'], (r) => resolve(r.servicePort))
   })
 }
 
@@ -57,65 +92,31 @@ async function checkService() {
   return scanPorts()
 }
 
-async function provisionSecret(port) {
-  try {
-    await fetch(`http://localhost:${port}/api/license/provision`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secret: PROVISION_SECRET })
-    })
-  } catch {
-  }
-}
-
-async function fetchLicense(port) {
-  try {
-    const res = await fetch(`http://localhost:${port}/api/license/status`)
-    if (res.ok) return res.json()
-  } catch {
-  }
-  return { type: 'free', activated: null }
-}
-
 async function updateUI() {
-  const statusEl = document.getElementById('status')
-  const licenseEl = document.getElementById('license')
-  const openBtn = document.getElementById('open')
-  const installBtn = document.getElementById('install')
-  const upgradeBtn = document.getElementById('upgrade')
+  const statusEl = document.getElementById("status")
+  const openBtn = document.getElementById("open")
+  const installBtn = document.getElementById("install")
 
   const { ok, url, port } = await checkService()
 
   if (ok) {
-    await provisionSecret(port)
-    const lic = await fetchLicense(port)
-    statusEl.textContent = `✓ Service online (port ${port})`
-    statusEl.className = 'status ok'
-    openBtn.style.display = 'block'
+    statusEl.textContent = t("online", port)
+    statusEl.className = "status ok"
+    openBtn.style.display = "block"
     openBtn.onclick = () => chrome.tabs.create({ url })
-    installBtn.style.display = 'none'
-
-    if (lic.type === 'pro') {
-      licenseEl.textContent = `✦ Pro`
-      licenseEl.className = 'license pro'
-      upgradeBtn.style.display = 'none'
-    } else {
-      licenseEl.textContent = '♢ Free (delete requires Pro)'
-      licenseEl.className = 'license free'
-      upgradeBtn.style.display = 'block'
-      upgradeBtn.onclick = () => chrome.tabs.create({ url: 'https://example.com/buy' })
-    }
+    installBtn.style.display = "none"
   } else {
-    statusEl.textContent = '✗ Local service not running'
-    statusEl.className = 'status err'
-    openBtn.style.display = 'none'
-    installBtn.style.display = 'block'
-    licenseEl.style.display = 'none'
+    statusEl.textContent = t("offline")
+    statusEl.className = "status err"
+    openBtn.style.display = "none"
+    installBtn.style.display = "block"
   }
+
+  applyI18n()
 }
 
-document.getElementById('install').addEventListener('click', () => {
-  chrome.tabs.create({ url: 'https://github.com/Jiayixiao20/opencode-session-manager#installation' })
+document.getElementById("install").addEventListener("click", () => {
+  chrome.tabs.create({ url: "https://github.com/Jiayixiao20/opencode-session-manager#installation" })
 })
 
-document.addEventListener('DOMContentLoaded', updateUI)
+document.addEventListener("DOMContentLoaded", updateUI)

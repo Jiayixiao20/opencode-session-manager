@@ -9,6 +9,78 @@ const http = require("http")
 const { parse: parseUrl } = require("url")
 const crypto = require("crypto")
 
+// ── i18n ──────────────────────────────────────────────────────────────────
+function detectLang(req) {
+  const al = (req.headers["accept-language"] || "").toLowerCase()
+  return al.startsWith("zh") ? "zh" : "en"
+}
+
+const I18N = {
+  en: {
+    title: "Session Manager - OpenCode",
+    heading: "Session Manager",
+    sessionCol: "Session",
+    all: "All",
+    today: "Today",
+    days3: "3 Days",
+    days7: "7 Days",
+    days30: "30 Days",
+    search: "Search sessions...",
+    total: (n) => `${n} total`,
+    empty: "No sessions found",
+    colSummary: "Summary",
+    colMsgs: "Msgs",
+    colCreated: "Created",
+    colLastActive: "Last Active",
+    colAction: "Action",
+    copyBtn: "Copy full command",
+    lowValueTitle: (n) => `Only ${n} message(s)`,
+    lowValueBadge: "low value",
+    deleteConfirm: "Delete this session? This cannot be undone.",
+    deleted: "Session deleted",
+    deleteFailed: "Delete failed",
+    meta: (n) => `${n} sessions`,
+    generated: "Generated",
+  },
+  zh: {
+    title: "会话管理器 - OpenCode",
+    heading: "会话管理器",
+    sessionCol: "会话",
+    all: "全部",
+    today: "今天",
+    days3: "3 天",
+    days7: "7 天",
+    days30: "30 天",
+    search: "搜索会话...",
+    total: (n) => `共 ${n} 个`,
+    empty: "未找到会话",
+    colSummary: "摘要",
+    colMsgs: "消息数",
+    colCreated: "创建时间",
+    colLastActive: "最后活跃",
+    colAction: "操作",
+    copyBtn: "复制完整命令",
+    lowValueTitle: (n) => `仅 ${n} 条消息`,
+    lowValueBadge: "低价值",
+    deleteConfirm: "确定要删除此会话？此操作无法撤销。",
+    deleted: "已删除",
+    deleteFailed: "删除失败",
+    meta: (n) => `${n} 个会话`,
+    generated: "生成于",
+  },
+}
+
+function t_(lang, key, ...args) {
+  const d = I18N[lang] || I18N.en
+  const v = d[key]
+  return typeof v === "function" ? v(...args) : v
+}
+
+function t(key, ...args) {
+  return t_(lang, key, ...args)
+}
+// ─────────────────────────────────────────────────────────────────────────
+
 function getDbPath() {
   const home = os.homedir()
 
@@ -198,10 +270,10 @@ function vacuumDatabase() {
   }
 }
 
-function buildSessionRow(sessions, index) {
+function buildSessionRow(sessions, index, t) {
   const s = sessions[index]
   const lowValueBadge = s.messageCount <= 1
-    ? `<span class="low-value" title="Only ${s.messageCount} message(s)">low value</span>`
+    ? `<span class="low-value" title="${t('lowValueTitle', s.messageCount)}">${t('lowValueBadge')}</span>`
     : ""
 
   return `
@@ -209,29 +281,30 @@ function buildSessionRow(sessions, index) {
       <td>${index + 1}</td>
       <td>
         <code style="font-size:12px;">opencode -s ${escapeHtml(shortenId(s.id))}</code>
-        <button class="copy-btn" onclick="copyText('opencode -s ${s.id}')" title="Copy full command">📋</button>
+        <button class="copy-btn" onclick="copyText('opencode -s ${s.id}')" title="${t('copyBtn')}">📋</button>
       </td>
       <td class="summary">${escapeHtml(s.summary)}${lowValueBadge}</td>
       <td>${s.messageCount}</td>
       <td>${formatDate(s.created)}</td>
       <td>${s.lastActive}</td>
       <td style="width: 90px;">
-        <button class="delete-btn" onclick="deleteSession('${s.id}')" title="Delete this session">🗑️</button>
+        <button class="delete-btn" onclick="deleteSession('${s.id}')" title="${t('deleteConfirm')}">🗑️</button>
       </td>
     </tr>`
 }
 
-function generateHTML(sessions) {
+function generateHTML(sessions, lang) {
+  const t = (key, ...args) => t_(lang, key, ...args)
   const rows = sessions
-    .map((_, index) => buildSessionRow(sessions, index))
+    .map((_, index) => buildSessionRow(sessions, index, t))
     .join("")
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${lang === 'zh' ? 'zh-CN' : 'en'}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Session Manager - OpenCode</title>
+  <title>${t('title')}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -437,33 +510,33 @@ function generateHTML(sessions) {
 <body>
   <div class="container">
     <div class="header">
-      <h1>Session Manager</h1>
+      <h1>${t('heading')}</h1>
       <div class="controls">
         <div class="filter-btns">
-          <button class="filter-btn active" data-days="all">All</button>
-          <button class="filter-btn" data-days="1">Today</button>
-          <button class="filter-btn" data-days="3">3 Days</button>
-          <button class="filter-btn" data-days="7">7 Days</button>
-          <button class="filter-btn" data-days="30">30 Days</button>
+          <button class="filter-btn active" data-days="all">${t('all')}</button>
+          <button class="filter-btn" data-days="1">${t('today')}</button>
+          <button class="filter-btn" data-days="3">${t('days3')}</button>
+          <button class="filter-btn" data-days="7">${t('days7')}</button>
+          <button class="filter-btn" data-days="30">${t('days30')}</button>
         </div>
         <div class="search-box">
-          <input type="text" id="search" placeholder="Search sessions..." autocomplete="off">
-          <span class="count" id="count">${sessions.length} total</span>
+          <input type="text" id="search" placeholder="${t('search')}" autocomplete="off">
+          <span class="count" id="count">${t('total', sessions.length)}</span>
         </div>
       </div>
     </div>
     ${sessions.length === 0
-      ? '<div class="empty">No sessions found</div>'
+      ? `<div class="empty">${t('empty')}</div>`
       : `<table>
       <thead>
         <tr>
           <th style="width: 50px;">#</th>
-          <th style="width: 220px;">Session</th>
-          <th>Summary</th>
-          <th style="width: 80px;">Msgs</th>
-          <th style="width: 130px;">Created</th>
-          <th style="width: 120px;">Last Active</th>
-          <th style="width: 90px;">Action</th>
+          <th style="width: 220px;">${t('sessionCol')}</th>
+          <th>${t('colSummary')}</th>
+          <th style="width: 80px;">${t('colMsgs')}</th>
+          <th style="width: 130px;">${t('colCreated')}</th>
+          <th style="width: 120px;">${t('colLastActive')}</th>
+          <th style="width: 90px;">${t('colAction')}</th>
         </tr>
       </thead>
       <tbody id="tbody">
@@ -471,7 +544,7 @@ function generateHTML(sessions) {
       </tbody>
     </table>`
     }
-    <div class="meta">${sessions.length} sessions · Generated ${formatDate(Date.now())}</div>
+    <div class="meta">${t('meta', sessions.length)} · ${t('generated')} ${formatDate(Date.now())}</div>
     <div id="toast" class="toast"></div>
   </div>
   <script>
@@ -540,7 +613,7 @@ function generateHTML(sessions) {
     }
 
     async function deleteSession(id) {
-      if (!confirm('Delete this session? This cannot be undone.')) {
+      if (!confirm(t('deleteConfirm'))) {
         return;
       }
 
@@ -551,17 +624,17 @@ function generateHTML(sessions) {
       try {
         const response = await fetch('/delete/' + id, { method: 'POST' });
         if (response.ok) {
-          showToast('Session deleted');
+          showToast(t('deleted'));
           if (row) row.remove();
           filterRows();
           await fetch('/refresh', { method: 'POST' }).catch(() => {});
         } else {
           const text = await response.text();
-          showToast('Delete failed: ' + text, true);
+          showToast(t('deleteFailed') + ': ' + text, true);
           if (btn) btn.disabled = false;
         }
       } catch (err) {
-        showToast('Delete failed: ' + err.message, true);
+        showToast(t('deleteFailed') + ': ' + err.message, true);
         if (btn) btn.disabled = false;
       }
     }
@@ -872,7 +945,8 @@ async function handleServe() {
 
     try {
       const sessions = getSessionsWithStats().filter((s) => s.messageCount > 1)
-      const html = generateHTML(sessions)
+      const lang = detectLang(req)
+      const html = generateHTML(sessions, lang)
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
       res.end(html)
     } catch (err) {
@@ -894,12 +968,13 @@ async function handleGenerate() {
   const sessions = getSessionsWithStats().filter((s) => s.messageCount > 1)
   console.log(`Found ${sessions.length} valid sessions`)
 
+  const lang = (process.env.LANG || "").toLowerCase().startsWith("zh") ? "zh" : "en"
   const outputPath = getDefaultOutputPath()
   const outputDir = path.dirname(outputPath)
   if (!existsSync(outputDir)) {
     mkdirSync(outputDir, { recursive: true })
   }
-  const html = generateHTML(sessions)
+  const html = generateHTML(sessions, lang)
   writeFileSync(outputPath, html, "utf-8")
 
   console.log(`✓ Generated ${outputPath}`)

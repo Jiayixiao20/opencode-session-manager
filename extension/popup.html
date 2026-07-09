@@ -29,20 +29,6 @@
       background: #fce8e6;
       color: #d93025;
     }
-    .license {
-      padding: 6px 10px;
-      border-radius: 6px;
-      font-size: 12px;
-      margin-bottom: 12px;
-    }
-    .license.pro {
-      background: #e8f0fe;
-      color: #1967d2;
-    }
-    .license.free {
-      background: #fef7e0;
-      color: #e37400;
-    }
     button {
       width: 100%;
       padding: 10px;
@@ -63,21 +49,13 @@
     button.install:hover {
       background: #1557b0;
     }
-    button.upgrade {
-      background: #e37400;
-    }
-    button.upgrade:hover {
-      background: #c46400;
-    }
   </style>
 </head>
 <body>
-  <h1>OpenCode Session Manager</h1>
-  <div id="status" class="status">Checking local service...</div>
-  <div id="license" class="license"></div>
-  <button id="open" style="display:none;">Open Dashboard</button>
-  <button id="install" class="install" style="display:none;">Install Local Service</button>
-  <button id="upgrade" class="upgrade" style="display:none;">Upgrade to Pro</button>
+  <h1 data-i18n="heading">OpenCode Session Manager</h1>
+  <div id="status" class="status" data-i18n="checking">Checking local service...</div>
+  <button id="open" style="display:none;" data-i18n="openDashboard">Open Dashboard</button>
+  <button id="install" class="install" style="display:none;" data-i18n="installService">Install Local Service</button>
   <script src="popup.js"></script>
 </body>
 </html>
