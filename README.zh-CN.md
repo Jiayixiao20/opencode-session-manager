@@ -45,7 +45,7 @@ npm install -g opencode-session-manager
 opencode-sessions
 ```
 
-这会在你的 `Downloads` 文件夹生成 `sessions.html`。
+这会在 `~/.opencode-session-manager/` 生成 `sessions.html`。 
 
 **💡 提示：** 生成后，用浏览器打开该 HTML 文件并添加到收藏夹，随时都能查看所有 OpenCode 会话。
 
@@ -101,7 +101,7 @@ opencode-sessions delete --older-than 30 --min-messages 1 --no-vacuum
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `OPENCODE_DB` | OpenCode 数据库路径 | 根据系统自动检测 |
-| `OPENCODE_SESSIONS_OUTPUT` | 输出 HTML 文件路径 | `~/Downloads/sessions.html` |
+| `OPENCODE_SESSIONS_OUTPUT` | 输出 HTML 文件路径 | `~/.opencode-session-manager/sessions.html` |
 
 ### 自定义数据库路径
 

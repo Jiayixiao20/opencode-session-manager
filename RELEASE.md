@@ -61,7 +61,7 @@ npm link
 opencode-sessions
 ```
 
-Generates `sessions.html` in your `Downloads` folder. Open it in your browser and bookmark for quick access.
+Generates `sessions.html` in `~/.opencode-session-manager/`. Open it in your browser and bookmark for quick access.
 
 ### Requirements
 
@@ -116,7 +116,7 @@ npm link
 opencode-sessions
 ```
 
-Generates `sessions.html` in your `Downloads` folder. Open it in your browser and bookmark for quick access.
+Generates `sessions.html` in `~/.opencode-session-manager/`. Open it in your browser and bookmark for quick access.
 
 ### Requirements
 

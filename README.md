@@ -55,7 +55,7 @@ a Task Scheduler entry to auto-start `opencode-sessions serve` at logon.
 opencode-sessions
 ```
 
-This will generate `sessions.html` in your `Downloads` folder.
+This will generate `sessions.html` in `~/.opencode-session-manager/`.
 
 **💡 Tip:** After generating, open the HTML file in your browser and bookmark it. This gives you instant access to all your OpenCode sessions anytime.
 
@@ -130,7 +130,7 @@ Delete options:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `OPENCODE_DB` | Path to OpenCode database | Auto-detected by OS |
-| `OPENCODE_SESSIONS_OUTPUT` | Output HTML file path | `~/Downloads/sessions.html` |
+| `OPENCODE_SESSIONS_OUTPUT` | Output HTML file path | `~/.opencode-session-manager/sessions.html` |
 
 ### Custom Database Path
 

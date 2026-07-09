@@ -34,7 +34,7 @@ function getDefaultOutputPath() {
     return customPath
   }
 
-  return path.join(home, "Downloads", "sessions.html")
+  return path.join(home, ".opencode-session-manager", "sessions.html")
 }
 
 function getPortFilePath() {
@@ -1012,6 +1012,10 @@ async function handleGenerate() {
   console.log(`Found ${sessions.length} valid sessions`)
 
   const outputPath = getDefaultOutputPath()
+  const outputDir = path.dirname(outputPath)
+  if (!existsSync(outputDir)) {
+    mkdirSync(outputDir, { recursive: true })
+  }
   const html = generateHTML(sessions)
   writeFileSync(outputPath, html, "utf-8")
 
