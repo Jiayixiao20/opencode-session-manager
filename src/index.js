@@ -58,52 +58,6 @@ function writePortFile(port) {
   }
 }
 
-let licenseSecret = null
-
-function getLicensePath() {
-  return path.join(os.homedir(), ".opencode-session-manager", "license")
-}
-
-function provisionLicenseSecret(secret) {
-  licenseSecret = secret
-}
-
-function validateLicenseKey(key) {
-  if (!licenseSecret) return false
-  if (typeof key !== "string") return false
-  key = key.trim().toUpperCase()
-  if (!/^[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}$/.test(key)) return false
-  const parts = key.split("-")
-  const sig = crypto.createHmac("sha256", licenseSecret)
-    .update(parts[0] + "-" + parts[1] + "-" + parts[2])
-    .digest("hex").toUpperCase()
-  return sig.startsWith(parts[3])
-}
-
-function readLicense() {
-  const lPath = getLicensePath()
-  try {
-    return JSON.parse(readFileSync(lPath, "utf-8"))
-  } catch {
-    return null
-  }
-}
-
-function writeLicense(data) {
-  const lPath = getLicensePath()
-  const dir = path.dirname(lPath)
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  writeFileSync(lPath, JSON.stringify(data, null, 2), "utf-8")
-}
-
-function getLicenseStatus() {
-  const lic = readLicense()
-  if (lic && lic.type === "pro") {
-    return { type: "pro", activated: lic.activated || null }
-  }
-  return { type: "free", activated: null }
-}
-
 function startServerWithPort(server, preferredPort, callback) {
   let port = preferredPort
 
@@ -867,12 +821,6 @@ async function handleServe() {
     }
 
     if (req.method === "POST" && pathname.startsWith("/delete/")) {
-      const lic = getLicenseStatus()
-      if (lic.type !== "pro") {
-        res.writeHead(402)
-        res.end("Pro license required for delete operations")
-        return
-      }
       const id = pathname.slice("/delete/".length)
       if (!validateSessionId(id)) {
         res.writeHead(400)
@@ -919,71 +867,6 @@ async function handleServe() {
     if (pathname === "/api/health") {
       res.writeHead(200, { "Content-Type": "application/json" })
       res.end(JSON.stringify({ ok: true, port: actualPort }))
-      return
-    }
-
-    if (pathname === "/api/license/provision" && req.method === "POST") {
-      let body = ""
-      req.on("data", (chunk) => body += chunk)
-      req.on("end", () => {
-        try {
-          const { secret } = JSON.parse(body)
-          if (secret && typeof secret === "string" && secret.length >= 16) {
-            provisionLicenseSecret(secret)
-            res.writeHead(200, { "Content-Type": "application/json" })
-            res.end(JSON.stringify({ ok: true }))
-          } else {
-            res.writeHead(400, { "Content-Type": "application/json" })
-            res.end(JSON.stringify({ ok: false, error: "Invalid secret" }))
-          }
-        } catch (err) {
-          res.writeHead(400, { "Content-Type": "application/json" })
-          res.end(JSON.stringify({ error: "Invalid request" }))
-        }
-      })
-      return
-    }
-
-    if (pathname === "/api/license/status") {
-      res.writeHead(200, { "Content-Type": "application/json" })
-      res.end(JSON.stringify(getLicenseStatus()))
-      return
-    }
-
-    if (pathname === "/api/license/activate" && req.method === "POST") {
-      let body = ""
-      req.on("data", (chunk) => body += chunk)
-      req.on("end", () => {
-        try {
-          const { key } = JSON.parse(body)
-          if (validateLicenseKey(key)) {
-            writeLicense({ key, type: "pro", activated: Date.now() })
-            res.writeHead(200, { "Content-Type": "application/json" })
-            res.end(JSON.stringify({ ok: true, type: "pro" }))
-          } else {
-            res.writeHead(400, { "Content-Type": "application/json" })
-            res.end(JSON.stringify({ ok: false, error: "Invalid license key" }))
-          }
-        } catch (err) {
-          res.writeHead(400, { "Content-Type": "application/json" })
-          res.end(JSON.stringify({ error: "Invalid request" }))
-        }
-      })
-      return
-    }
-
-    if (pathname === "/api/license/deactivate" && req.method === "POST") {
-      try {
-        const lPath = getLicensePath()
-        if (existsSync(lPath)) {
-          writeFileSync(lPath, JSON.stringify({ type: "free" }, null, 2), "utf-8")
-        }
-        res.writeHead(200, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ ok: true, type: "free" }))
-      } catch (err) {
-        res.writeHead(500, { "Content-Type": "application/json" })
-        res.end(JSON.stringify({ error: err.message }))
-      }
       return
     }
 
