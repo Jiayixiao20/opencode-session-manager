@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { execFileSync } = require("child_process")
-const { writeFileSync, createReadStream, existsSync, statSync, readFileSync, mkdirSync } = require("fs")
+const { writeFileSync, existsSync, statSync, readFileSync, mkdirSync } = require("fs")
 const path = require("path")
 const os = require("os")
 const readline = require("readline")
@@ -851,15 +851,6 @@ async function performDelete(targets, shouldVacuum = true) {
 
 async function handleServe() {
   const preferredPort = getDefaultPort()
-  const outputPath = getDefaultOutputPath()
-
-  if (!existsSync(outputPath)) {
-    console.log(`Output file not found, generating ${outputPath}...`)
-    const sessions = getSessionsWithStats().filter((s) => s.messageCount > 1)
-    const html = generateHTML(sessions)
-    writeFileSync(outputPath, html, "utf-8")
-  }
-
   let actualPort = preferredPort
 
   const server = http.createServer(async (req, res) => {
@@ -908,16 +899,8 @@ async function handleServe() {
     }
 
     if (pathname === "/refresh") {
-      try {
-        const sessions = getSessionsWithStats().filter((s) => s.messageCount > 1)
-        const html = generateHTML(sessions)
-        writeFileSync(outputPath, html, "utf-8")
-        res.writeHead(200)
-        res.end("OK")
-      } catch (err) {
-        res.writeHead(500)
-        res.end(err.message)
-      }
+      res.writeHead(200)
+      res.end("OK")
       return
     }
 
@@ -1004,8 +987,15 @@ async function handleServe() {
       return
     }
 
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
-    createReadStream(outputPath).pipe(res)
+    try {
+      const sessions = getSessionsWithStats().filter((s) => s.messageCount > 1)
+      const html = generateHTML(sessions)
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
+      res.end(html)
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "text/plain" })
+      res.end(`Error generating page: ${err.message}`)
+    }
   })
 
   startServerWithPort(server, preferredPort, (port) => {
