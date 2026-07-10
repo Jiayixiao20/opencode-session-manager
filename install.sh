@@ -35,6 +35,11 @@ fi
 # Remove old installation
 if [ -d "$INSTALL_DIR" ]; then
     echo "Removing old installation..."
+    if [ -f "$INSTALL_DIR/sessions.html" ]; then
+        BACKUP_FILE="/tmp/opencode-sessions.html.bak.$(date +%s)"
+        cp "$INSTALL_DIR/sessions.html" "$BACKUP_FILE"
+        echo "  Backed up existing sessions.html to $BACKUP_FILE"
+    fi
     rm -rf "$INSTALL_DIR"
 fi
 
@@ -45,6 +50,11 @@ git clone --depth 1 "$REPO.git" "$INSTALL_DIR" 2>/dev/null || {
     mkdir -p "$INSTALL_DIR"
     curl -L "$REPO/archive/main.tar.gz" | tar xz -C "$INSTALL_DIR" --strip-components=1
 }
+
+if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
+    cp "$BACKUP_FILE" "$INSTALL_DIR/sessions.html"
+    echo "  Restored existing sessions.html"
+fi
 
 # Create bin directory
 mkdir -p "$BIN_DIR"
