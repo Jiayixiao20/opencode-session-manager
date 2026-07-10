@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 ExecStart=%h/.opencode-session-manager/bin/opencode-sessions serve
 Restart=on-failure
-Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=__USER_PATH__"
 
 [Install]
 WantedBy=default.target

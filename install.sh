@@ -67,6 +67,7 @@ if command -v systemctl >/dev/null 2>&1; then
     mkdir -p "$SYSTEMD_USER_DIR"
     cp "$INSTALL_DIR/systemd/opencode-session-manager.service" "$SYSTEMD_USER_DIR/"
     sed -i "s|%h|$HOME|g" "$SYSTEMD_USER_DIR/opencode-session-manager.service"
+    sed -i "s|__USER_PATH__|$PATH|g" "$SYSTEMD_USER_DIR/opencode-session-manager.service"
     systemctl --user daemon-reload
     systemctl --user enable opencode-session-manager.service
     systemctl --user start opencode-session-manager.service
