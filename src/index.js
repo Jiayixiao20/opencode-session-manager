@@ -9,6 +9,15 @@ const http = require("http")
 const { parse: parseUrl } = require("url")
 const crypto = require("crypto")
 
+process.on("uncaughtException", (err) => {
+  console.error("Fatal error:", err.message)
+  console.error(err.stack)
+  process.exit(1)
+})
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason)
+})
+
 // ── i18n ──────────────────────────────────────────────────────────────────
 function detectLang(req) {
   const al = (req.headers["accept-language"] || "").toLowerCase()
@@ -143,7 +152,8 @@ function startServerWithPort(server, preferredPort, callback) {
         }
         tryListen()
       } else {
-        throw err
+        console.error(`Fatal server error: ${err.message}`)
+        process.exit(1)
       }
     })
 
